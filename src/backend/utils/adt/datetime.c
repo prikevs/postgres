@@ -2446,6 +2446,14 @@ int
 ValidateDate(int fmask, bool isjulian, bool is2digits, bool bc,
 			 struct pg_tm * tm)
 {
+	if (tm->tm_year == 0 && tm->tm_mon == 0 && tm->tm_mday == 0) {
+		tm->tm_year = 1;
+		tm->tm_mon = 1;
+		tm->tm_mday = 1;
+		bc = true;
+	}
+
+
 	if (fmask & DTK_M(YEAR))
 	{
 		if (isjulian)
