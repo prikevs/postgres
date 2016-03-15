@@ -16,21 +16,24 @@
 #include "storage/lwlock.h"
 #include "storage/pmsignal.h"
 
-bool RetrieveXLogFile(char *targetFname, char *path)
+bool RetrieveXLogFile(const char *targetFname, char *path)
 {
 	char xlogpath[MAXPGPATH];
 	char xlogRetrieveCmd[MAXPGPATH];
+	const char *sp;
+	const char *retrievepath;
+	int rc;
+	char *dp;
+	char *endp;
 
 	/* to be loaded by guc.c */
-	const char *retrievepath = XLogRetrievePath;
-	int rc;
 
 	if (XLogRetrieveCommand == NULL) 
 		return false;
-
-	const char *sp;
-	char *dp = xlogRetrieveCmd;
-	char *endp = xlogRetrieveCmd + MAXPGPATH - 1;
+	
+	retrievepath = XLogRetrievePath;
+	dp = xlogRetrieveCmd;
+	endp = xlogRetrieveCmd + MAXPGPATH - 1;
 	*endp = '\0';
 
 	/* We can replace XLOGDIR to some path much safer */
@@ -60,6 +63,7 @@ bool RetrieveXLogFile(char *targetFname, char *path)
 					StrNCpy(dp, retrievepath, endp-dp);
 					make_native_path(dp);
 					dp += strlen(dp);
+					break;
 				case '%':
 					/* convert %% to a single % */
 					sp++;
@@ -78,20 +82,19 @@ bool RetrieveXLogFile(char *targetFname, char *path)
 			if (dp < endp) 
 				*dp++ = *sp;
 		}
-		*dp = '\0';
-		ereport(DEBUG3,
-				(errmsg_internal("executing retrieve command \"%s\"",
-									xlogRetrieveCmd)));
-		rc = system(xlogRetrieveCmd);
-
-		if (rc == 0) 
-		{
-			memcpy(path, xlogpath, MAXPGPATH-1);
-			return true;
-		}
-		return false;
 	}
+	*dp = '\0';
+	ereport(DEBUG3,
+			(errmsg_internal("executing retrieve command \"%s\"",
+									xlogRetrieveCmd)));
+	rc = system(xlogRetrieveCmd);
 
+	if (rc == 0) 
+	{
+		memcpy(path, xlogpath, MAXPGPATH-1);
+		return true;
+	}
+	return false;
 
 }
 
@@ -103,5 +106,5 @@ void DelRetrievedFile(bool *isRetrieved, char *lastRetrievedFile)
 		snprintf(delCmd, MAXPGPATH, "rm -f %s", lastRetrievedFile);	
 		system(delCmd);
 	}
-	isRetrieved = false;
+	*isRetrieved = false;
 }

@@ -303,7 +303,7 @@ extern char *recoveryRestoreCommand;
 extern bool RestoreArchivedFile(char *path, const char *xlogfname,
 					const char *recovername, off_t expectedSize,
 					bool cleanupEnabled);
-extern bool RetrieveXLogFile(char *targetFname, char *path);
+extern bool RetrieveXLogFile(const char *targetFname, char *path);
 extern void DelRetrievedFile(bool *isRetrieved, char *lastRetrievedFile);
 extern void ExecuteRecoveryCommand(char *command, char *commandName,
 					   bool failOnerror);
