@@ -121,6 +121,12 @@ bool		wake_wal_senders = false;
 static int	sendFile = -1;
 static XLogSegNo sendSegNo = 0;
 static uint32 sendOff = 0;
+/*
+ * These variables are used with sendFile to determine whether the file 
+ * to be closed is retrieved from archive.
+ */
+static char lastRetrievedFile[MAXPGPATH];
+static bool isRetrieved = false;
 
 /* Timeline ID of the currently open file */
 static TimeLineID curFileTimeLine = 0;
@@ -257,6 +263,7 @@ WalSndErrorCleanup()
 	{
 		close(sendFile);
 		sendFile = -1;
+		DelRetrievedFile(&isRetrieved, lastRetrievedFile);
 	}
 
 	if (MyReplicationSlot != NULL)
@@ -2019,6 +2026,7 @@ XLogRead(char *buf, XLogRecPtr startptr, Size count)
 	XLogRecPtr	recptr;
 	Size		nbytes;
 	XLogSegNo	segno;
+	char *fname;
 
 retry:
 	p = buf;
@@ -2032,14 +2040,16 @@ retry:
 		int			readbytes;
 
 		startoff = recptr % XLogSegSize;
-
 		if (sendFile < 0 || !XLByteInSeg(recptr, sendSegNo))
 		{
 			char		path[MAXPGPATH];
 
 			/* Switch to another logfile segment */
 			if (sendFile >= 0)
+			{
 				close(sendFile);
+				DelRetrievedFile(&isRetrieved, lastRetrievedFile);
+			}
 
 			XLByteToSeg(recptr, sendSegNo);
 
@@ -2081,6 +2091,8 @@ retry:
 
 			XLogFilePath(path, curFileTimeLine, sendSegNo);
 
+			bool retryFlag = true;
+tryRetrieve:
 			sendFile = BasicOpenFile(path, O_RDONLY | PG_BINARY, 0);
 			if (sendFile < 0)
 			{
@@ -2090,10 +2102,23 @@ retry:
 				 * removed or recycled.
 				 */
 				if (errno == ENOENT)
+				{
+					/* If not found, try to retrieve the file */
+					XLogFileName(fname, curFileTimeLine, sendSegNo);
+					ereport(LOG,
+							(errcode_for_file_access(),
+							 errmsg("File %s not found, try to retrieve file, then try again",
+								fname)));
+					if (retryFlag && RetrieveXLogFile(fname, path)) {
+						retryFlag = false;
+						goto tryRetrieve;
+					}
+
 					ereport(ERROR,
 							(errcode_for_file_access(),
 							 errmsg("requested WAL segment %s has already been removed",
 								XLogFileNameP(curFileTimeLine, sendSegNo))));
+				}
 				else
 					ereport(ERROR,
 							(errcode_for_file_access(),
@@ -2101,6 +2126,12 @@ retry:
 									path)));
 			}
 			sendOff = 0;
+			if (retryFlag == false)
+			{
+				isRetrieved = true;
+				memcpy(lastRetrievedFile, path, sizeof(lastRetrievedFile));
+			}
+
 		}
 
 		/* Need to seek in the file? */
@@ -2170,6 +2201,7 @@ retry:
 		{
 			close(sendFile);
 			sendFile = -1;
+			DelRetrievedFile(&isRetrieved, lastRetrievedFile);
 
 			goto retry;
 		}
@@ -2306,7 +2338,10 @@ XLogSendPhysical(void)
 	{
 		/* close the current file. */
 		if (sendFile >= 0)
+		{
 			close(sendFile);
+			DelRetrievedFile(&isRetrieved, lastRetrievedFile);
+		}
 		sendFile = -1;
 
 		/* Send CopyDone */

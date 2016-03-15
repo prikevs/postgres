@@ -163,6 +163,8 @@ static bool check_timezone_abbreviations(char **newval, void **extra, GucSource 
 static void assign_timezone_abbreviations(const char *newval, void *extra);
 static void pg_timezone_abbrev_initialize(void);
 static const char *show_archive_command(void);
+static const char *show_retrieve_command(void);
+static const char *show_retrieve_path(void);
 static void assign_tcp_keepalives_idle(int newval, void *extra);
 static void assign_tcp_keepalives_interval(int newval, void *extra);
 static void assign_tcp_keepalives_count(int newval, void *extra);
@@ -2824,6 +2826,26 @@ static struct config_real ConfigureNamesReal[] =
 
 static struct config_string ConfigureNamesString[] =
 {
+	{
+		{"retrieve_command", PGC_SIGHUP, XLOG_RETRIEVING,
+			gettext_noop("Sets the shell command that will be called to retrieve a XLOG file."),
+			NULL
+		},
+		&XLogRetrieveCommand,
+		"",
+		NULL, NULL, show_retrieve_command
+	},
+
+	{
+		{"retrieve_path", PGC_SIGHUP, XLOG_RETRIEVING,
+			gettext_noop("Sets the retrieving path of archived XLOG file"),
+			NULL
+		},
+		&XLogRetrievePath,
+		"",
+		check_canonical_path, NULL, show_retrieve_path,
+	},
+
 	{
 		{"archive_command", PGC_SIGHUP, WAL_ARCHIVING,
 			gettext_noop("Sets the shell command that will be called to archive a WAL file."),
@@ -9853,6 +9875,18 @@ show_archive_command(void)
 		return XLogArchiveCommand;
 	else
 		return "(disabled)";
+}
+
+static const char *
+show_retrieve_command(void)
+{
+	return XLogRetrieveCommand;
+}
+
+static const char *
+show_retrieve_path(void)
+{
+	return XLogRetrievePath;
 }
 
 static void

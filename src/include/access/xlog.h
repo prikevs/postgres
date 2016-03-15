@@ -99,6 +99,8 @@ extern int	XLOGbuffers;
 extern int	XLogArchiveTimeout;
 extern int	wal_retrieve_retry_interval;
 extern char *XLogArchiveCommand;
+extern char *XLogRetrieveCommand;
+extern char *XLogRetrievePath;
 extern bool EnableHotStandby;
 extern bool fullPageWrites;
 extern bool wal_log_hints;
